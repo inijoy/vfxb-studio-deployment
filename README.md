@@ -29,6 +29,179 @@ Known gaps:
 - some features depend on external services being correctly configured: Supabase, R2, Stripe, AssemblyAI, Google, Anthropic/OpenAI
 - the Node server in `back/server` is separate from the FastAPI stack and should be treated as an additional service, not part of the Docker compose stack yet
 
+## Backend Features Added
+
+The current backend work already includes the main building blocks for upload, analysis, chat-based editing, billing, and background processing.
+
+### 1. Upload and storage flow
+
+Added in the FastAPI backend:
+
+- presigned upload URL generation for direct browser-to-R2 uploads
+- upload validation for supported video types, size, and platform
+- upload completion endpoint that marks a video as processing
+- URL import entrypoint for YouTube, Google Drive, and Dropbox sources
+- Cloudflare R2 storage helpers for upload, download, public URL generation, and object key generation
+
+### 2. Video analysis pipeline
+
+Added in the worker/backend:
+
+- transcription stage
+- visual frame analysis stage
+- audio analysis stage
+- virality scoring stage
+- orchestrated background pipeline that downloads source media, runs all analysis steps, saves results, and updates video status
+
+### 3. Chat-based edit engine
+
+Added in the backend:
+
+- SSE chat streaming endpoint
+- conversation history persistence
+- edit plan creation and confirmation flow
+- Gemini-capable NLP parser path with model routing support
+- queue handoff for edit execution
+
+### 4. Edit execution and progress tracking
+
+Added in the worker/backend:
+
+- FFmpeg edit job runner
+- support for silence cutting, trim range, speed changes, captions, platform export, color grading, and clip extraction
+- edit progress metadata through RQ jobs
+- WebSocket endpoint for real-time edit status updates
+
+### 5. User, plan, and billing support
+
+Added in the backend:
+
+- authenticated user profile endpoints
+- first-login user creation flow
+- plan-based quota checking
+- Stripe checkout session creation
+- Stripe billing portal session creation
+- Stripe webhook processing for subscription state updates
+
+### 6. Infra and resilience improvements
+
+Added or improved:
+
+- Dockerized `api`, `worker`, `web`, and `redis`
+- API startup no longer hard-fails immediately when Supabase is misconfigured
+- in-memory rate-limit fallback when Redis is unavailable
+- safer handling for queue-unavailable states in upload/edit endpoints
+- multiple backend type-check and Pylance fixes across routers and worker steps
+
+## Backend Functions Available
+
+This is the current backend function surface available to the team.
+
+### FastAPI routes
+
+User routes:
+
+- `GET /api/users/me`: get current user profile
+- `PATCH /api/users/me`: update user profile fields
+- `POST /api/users/ensure`: create the app user record after auth
+
+Upload routes:
+
+- `POST /api/upload/presigned`: request presigned upload URL
+- `POST /api/upload/complete`: finalize upload and trigger analysis queue
+- `POST /api/upload/from-url`: create import job from supported external URL
+
+Video routes:
+
+- `GET /api/videos`: list videos for current user
+- `GET /api/videos/{video_id}`: get full video detail
+- `DELETE /api/videos/{video_id}`: delete video and related data
+- `GET /api/videos/{video_id}/edits`: list edits for a video
+- `GET /api/videos/{video_id}/analysis`: get analysis payload and score data
+- `GET /api/stats`: return dashboard summary stats
+
+Chat routes:
+
+- `POST /api/chat/message`: stream AI chat response over SSE
+- `POST /api/chat/confirm-edit`: confirm or cancel a pending AI edit plan
+- `GET /api/chat/history/{video_id}`: fetch stored chat history for a video
+
+Stripe routes:
+
+- `POST /api/stripe/create-checkout`: create checkout session
+- `GET /api/stripe/portal`: create billing portal session
+- `POST /api/stripe/webhook`: Stripe webhook receiver
+
+Realtime route:
+
+- `WS /ws/edit-status/{job_id}`: stream edit progress updates to the frontend
+
+Utility route:
+
+- `GET /health`: API health check
+
+### Worker functions
+
+Analysis worker functions:
+
+- `steps.analyze_pipeline.run`: full analysis pipeline entrypoint
+- `steps.transcribe.transcribe_video`: transcription stage
+- `steps.visual_analysis.analyze_visual`: visual frame analysis stage
+- `steps.audio_analysis.analyze_audio`: audio analysis stage
+- `steps.virality_score.calculate_virality_score`: virality scoring stage
+
+Edit worker functions:
+
+- `services.ffmpeg_executor.run_edit`: main edit job entrypoint
+- `cut_silence`
+- `trim_range`
+- `change_speed`
+- `add_captions`
+- `platform_export`
+- `color_grade`
+- `extract_best_clip`
+
+Storage helper functions:
+
+- `generate_presigned_upload_url`
+- `generate_presigned_download_url`
+- `upload_file`
+- `upload_fileobj`
+- `download_file`
+- `delete_object`
+- `make_video_key`
+- `make_export_key`
+
+## Backend Work Still Needed
+
+The backend is not finished. These are the main remaining tasks.
+
+### Required to make the backend fully functional
+
+- replace placeholder `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
+- verify the Supabase schema matches all tables used by the API: `users`, `videos`, `edits`, `chat_messages`, `subscriptions`
+- confirm required RPC functions exist, especially usage-counter helpers
+- configure valid R2 buckets and public delivery URL
+- verify AssemblyAI/OpenAI/Anthropic/Gemini keys based on the models we actually want to use
+- verify Stripe product IDs and webhook secret
+
+### Required to make the backend production-ready
+
+- add proper integration tests for upload, chat, billing, and edit flows
+- add schema migration documentation and seed data instructions
+- add stronger error classification and structured logging
+- audit auth flow consistency between Supabase auth and the separate Node auth server
+- decide whether `back/server` should remain separate or be merged/replaced
+- add production deployment configuration for API and worker services
+
+### Likely implementation gaps still to close
+
+- complete end-to-end validation of upload -> analyze -> chat -> confirm edit -> worker execution
+- confirm websocket progress updates against real queued edit jobs
+- add retry and dead-letter handling for failed jobs
+- review quota enforcement and subscription transitions against real billing events
+- review fallback behavior when Redis, Supabase, or AI providers are partially unavailable
+
 ## What Has Already Been Done
 
 The following setup and fixes are already in place:
