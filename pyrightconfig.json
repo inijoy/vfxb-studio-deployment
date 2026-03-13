@@ -1,0 +1,22 @@
+{
+  "venvPath": ".",
+  "include": [
+    "apps/api",
+    "apps/worker"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "apps/api",
+      "extraPaths": [
+        "apps/api"
+      ]
+    },
+    {
+      "root": "apps/worker",
+      "extraPaths": [
+        "apps/worker",
+        "apps/api"
+      ]
+    }
+  ]
+}

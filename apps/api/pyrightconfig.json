@@ -1,0 +1,14 @@
+{
+  "venvPath": "../..",
+  "include": [
+    "**/*.py"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "."
+      ]
+    }
+  ]
+}
