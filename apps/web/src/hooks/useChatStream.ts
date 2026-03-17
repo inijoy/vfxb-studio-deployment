@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react'
 import { api } from '../lib/api'
+import { getStoredAuthToken } from '../lib/authStorage'
 import { useChatStore } from '../store/chat'
 import { useVideoStore } from '../store/video'
-import { supabase } from '../lib/supabase'
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
@@ -60,10 +60,7 @@ export function useChatStream(): UseChatStreamReturn {
       clearStreamBuffer()
 
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const token = session?.access_token
+        const token = getStoredAuthToken()
         if (!token) {
           throw new Error('No auth token available')
         }

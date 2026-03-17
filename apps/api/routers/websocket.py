@@ -42,9 +42,9 @@ async def edit_status_ws(websocket: WebSocket, job_id: str):
             return
 
         # Validate token (re-use the auth middleware logic)
-        from middleware.auth import _decode_supabase_jwt
+        from middleware.auth import decode_auth_jwt
         try:
-            payload = _decode_supabase_jwt(token)
+            payload = decode_auth_jwt(token)
             user_id = payload.get("sub")
         except Exception:
             await websocket.send_json({"error": "Invalid token"})

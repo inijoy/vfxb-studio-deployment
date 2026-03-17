@@ -1,79 +1,25 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Session, User } from '@supabase/supabase-js'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { api, type UserProfile } from '../lib/api'
 
-const DEMO_AUTH_STORAGE_KEY = 'vfxb-demo-auth-user'
-const DEMO_AUTH_PASSWORD = 'demo1234'
+const AUTH_API_URL = (import.meta.env.VITE_AUTH_API_URL ?? 'http://localhost:5000').replace(/\/$/, '')
 
-type DemoAuthUser = {
+type AppUser = {
   id: string
   email: string
-  full_name: string
-}
-
-function buildDemoUser(email: string): DemoAuthUser {
-  return {
-    id: `demo-${email.toLowerCase()}`,
-    email,
-    full_name: 'Demo Developer',
-  }
-}
-
-function saveDemoUser(user: DemoAuthUser) {
-  localStorage.setItem(DEMO_AUTH_STORAGE_KEY, JSON.stringify(user))
-}
-
-function getDemoUser(): DemoAuthUser | null {
-  const raw = localStorage.getItem(DEMO_AUTH_STORAGE_KEY)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as DemoAuthUser
-    if (!parsed?.email) return null
-    return parsed
-  } catch {
-    return null
-  }
-}
-
-function clearDemoUser() {
-  localStorage.removeItem(DEMO_AUTH_STORAGE_KEY)
-}
-
-function asDemoSession(user: DemoAuthUser): Session {
-  const now = new Date().toISOString()
-  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
-  return {
-    access_token: 'demo-access-token',
-    refresh_token: 'demo-refresh-token',
-    token_type: 'bearer',
-    user: {
-      id: user.id,
-      email: user.email,
-      user_metadata: { full_name: user.full_name, demo: true },
-      app_metadata: {},
-      aud: 'authenticated',
-      created_at: now,
-    } as User,
-    expires_at: expiresAt,
-    expires_in: expiresAt - Math.floor(Date.now() / 1000),
-  } as Session
-}
-
-function isFetchFailure(err: unknown): boolean {
-  return err instanceof TypeError && /failed to fetch/i.test(err.message)
+  name?: string
+  profilePicture?: string | null
 }
 
 interface AuthState {
-  user: User | null
-  session: Session | null
+  user: AppUser | null
+  token: string | null
   profile: UserProfile | null
   isLoading: boolean
   isAuthenticated: boolean
 
   // Actions
-  setSession: (session: Session | null) => void
+  setAuth: (auth: { user: AppUser; token: string } | null) => void
   setProfile: (profile: UserProfile | null) => void
   signInWithEmail: (email: string, password: string) => Promise<void>
   signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<void>
@@ -83,20 +29,61 @@ interface AuthState {
   loadProfile: () => Promise<void>
 }
 
+async function requestAuth(path: string, body: Record<string, unknown>) {
+  const res = await fetch(`${AUTH_API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const data = (await res.json().catch(() => ({}))) as {
+    message?: string
+    token?: string
+    result?: {
+      _id?: string
+      id?: string
+      email?: string
+      name?: string
+      profilePicture?: string | null
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(data.message ?? `Authentication failed (${res.status})`)
+  }
+
+  if (!data.token || !data.result) {
+    throw new Error('Invalid auth server response')
+  }
+
+  const user: AppUser = {
+    id: data.result._id ?? data.result.id ?? '',
+    email: data.result.email ?? '',
+    name: data.result.name,
+    profilePicture: data.result.profilePicture ?? null,
+  }
+
+  if (!user.id || !user.email) {
+    throw new Error('Auth user payload is missing required fields')
+  }
+
+  return { user, token: data.token }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      session: null,
+      token: null,
       profile: null,
       isLoading: true,
       isAuthenticated: false,
 
-      setSession: (session) => {
+      setAuth: (auth) => {
         set({
-          session,
-          user: session?.user ?? null,
-          isAuthenticated: !!session,
+          user: auth?.user ?? null,
+          token: auth?.token ?? null,
+          isAuthenticated: Boolean(auth?.token),
           isLoading: false,
         })
       },
@@ -104,161 +91,75 @@ export const useAuthStore = create<AuthState>()(
       setProfile: (profile) => set({ profile }),
 
       signInWithEmail: async (email, password) => {
-        if (!isSupabaseConfigured) {
-          if (password !== DEMO_AUTH_PASSWORD) {
-            throw new Error('Demo mode: use password demo1234')
-          }
-          const demoUser = buildDemoUser(email)
-          saveDemoUser(demoUser)
-          get().setSession(asDemoSession(demoUser))
-          return
-        }
-
-        try {
-          const { error } = await supabase.auth.signInWithPassword({ email, password })
-          if (error) throw error
-        } catch (err) {
-          if (isFetchFailure(err)) {
-            if (password !== DEMO_AUTH_PASSWORD) {
-              throw new Error('Supabase unreachable. Demo mode password: demo1234')
-            }
-            const demoUser = buildDemoUser(email)
-            saveDemoUser(demoUser)
-            get().setSession(asDemoSession(demoUser))
-            return
-          }
-          throw err
-        }
+        const auth = await requestAuth('/api/signin', { email, password })
+        get().setAuth(auth)
       },
 
       signUpWithEmail: async (email, password, fullName) => {
-        if (!isSupabaseConfigured) {
-          if (password !== DEMO_AUTH_PASSWORD) {
-            throw new Error('Demo mode: use password demo1234')
-          }
-          const demoUser = {
-            ...buildDemoUser(email),
-            full_name: fullName || 'Demo Developer',
-          }
-          saveDemoUser(demoUser)
-          get().setSession(asDemoSession(demoUser))
-          return
-        }
-
-        try {
-          const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: { full_name: fullName },
-            },
-          })
-          if (error) throw error
-        } catch (err) {
-          if (isFetchFailure(err)) {
-            if (password !== DEMO_AUTH_PASSWORD) {
-              throw new Error('Supabase unreachable. Demo mode password: demo1234')
-            }
-            const demoUser = {
-              ...buildDemoUser(email),
-              full_name: fullName || 'Demo Developer',
-            }
-            saveDemoUser(demoUser)
-            get().setSession(asDemoSession(demoUser))
-            return
-          }
-          throw err
-        }
+        const auth = await requestAuth('/api/signup', {
+          name: fullName,
+          email,
+          password,
+        })
+        get().setAuth(auth)
       },
 
       signInWithGoogle: async () => {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: `${window.location.origin}/` },
-        })
-        if (error) throw error
+        throw new Error('Google sign-in is not wired in Mongo auth flow yet')
       },
 
       signInWithGitHub: async () => {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'github',
-          options: { redirectTo: `${window.location.origin}/` },
-        })
-        if (error) throw error
+        throw new Error('GitHub sign-in is not wired in Mongo auth flow yet')
       },
 
       signOut: async () => {
-        clearDemoUser()
-        if (isSupabaseConfigured) {
-          await supabase.auth.signOut()
-        }
-        set({ user: null, session: null, profile: null, isAuthenticated: false })
+        set({ user: null, token: null, profile: null, isAuthenticated: false, isLoading: false })
       },
 
       loadProfile: async () => {
-        const demoUser = getDemoUser()
-        if (demoUser) {
-          set({
-            profile: {
-              id: demoUser.id,
-              email: demoUser.email,
-              full_name: demoUser.full_name,
-              avatar_url: null,
-              plan: 'pro',
-              creator_mode: 'longform',
-              videos_used: 0,
-              videos_limit: 999999,
-              created_at: new Date().toISOString(),
-            },
-          })
-          return
-        }
-
+        if (!get().token) return
         try {
-          // Ensure user record exists in our DB (upsert on first sign-in)
+          // FastAPI side user profile for studio features
           await api.post('/api/users/ensure')
           const profile = await api.get<UserProfile>('/api/users/me')
           set({ profile })
-        } catch (err) {
-          console.error('Failed to load user profile:', err)
+        } catch {
+          // Fallback to auth-server identity when API profile is unavailable
+          const authUser = get().user
+          if (!authUser) return
+          set({
+            profile: {
+              id: authUser.id,
+              email: authUser.email,
+              full_name: authUser.name ?? null,
+              avatar_url: authUser.profilePicture ?? null,
+              plan: 'free',
+              creator_mode: 'longform',
+              videos_used: 0,
+              videos_limit: 3,
+              created_at: new Date().toISOString(),
+            },
+          })
         }
       },
     }),
     {
       name: 'vfxb-auth',
       partialize: (state) => ({
-        // Only persist non-sensitive UI state across page reloads
+        user: state.user,
+        token: state.token,
         profile: state.profile,
       }),
     }
   )
 )
 
-// ── Supabase auth listener — call this once in main.tsx ───────────────────────
 export function initAuthListener() {
-  const { setSession, loadProfile } = useAuthStore.getState()
-
-  const demoUser = getDemoUser()
-  if (demoUser) {
-    setSession(asDemoSession(demoUser))
-    loadProfile()
+  const { token, setAuth, loadProfile, user } = useAuthStore.getState()
+  if (!token || !user) {
+    setAuth(null)
     return
   }
-
-  if (!isSupabaseConfigured) {
-    setSession(null)
-    return
-  }
-
-  supabase.auth.getSession().then(({ data }) => {
-    setSession(data.session)
-    if (data.session) loadProfile()
-  })
-
-  supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session)
-    if (session) {
-      loadProfile()
-    }
-  })
+  setAuth({ user, token })
+  loadProfile()
 }

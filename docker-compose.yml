@@ -58,7 +58,20 @@ services:
       - web_node_modules:/app/node_modules
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
+  auth:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    env_file:
+      - back/server/.env
+    volumes:
+      - ./back/server:/app
+      - auth_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
 volumes:
   redis_data:
   vfxb_tmp:
   web_node_modules:
+  auth_node_modules:

@@ -1,10 +1,10 @@
 /**
  * Typed API client — thin wrapper around fetch that:
  * 1. Prepends VITE_API_URL
- * 2. Attaches the Supabase JWT from the current session
+ * 2. Attaches the app JWT token from auth storage
  * 3. Throws on non-2xx responses with structured error info
  */
-import { supabase } from './supabase'
+import { getStoredAuthToken } from './authStorage'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -20,8 +20,7 @@ export class ApiError extends Error {
 }
 
 async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+  const token = getStoredAuthToken()
   if (!token) return {}
   return { Authorization: `Bearer ${token}` }
 }
@@ -84,8 +83,7 @@ export const api = {
    * supported by the native EventSource API.
    */
   async sse(path: string): Promise<EventSource> {
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token ?? ''
+    const token = getStoredAuthToken() ?? ''
     const url = `${API_URL}${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
     return new EventSource(url)
   },

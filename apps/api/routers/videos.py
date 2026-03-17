@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from db.client import get_db
+from db.client import get_db, increment_videos_used
 from middleware.auth import CurrentUser
 
 logger = logging.getLogger(__name__)
@@ -97,11 +97,16 @@ async def delete_video(video_id: str, user: CurrentUser):
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
-    # Delete from DB (cascade handles edits/chats/exports via FK)
+    # Delete related docs explicitly (Mongo has no FK cascade)
+    db.table("edits").delete().eq("video_id", video_id).execute()
+    db.table("chat_messages").delete().eq("video_id", video_id).execute()
+    db.table("exports").delete().eq("video_id", video_id).execute()
+
+    # Delete video document
     db.table("videos").delete().eq("id", video_id).execute()
 
     # Decrement usage counter
-    db.rpc("decrement_videos_used", {"uid": user.id}).execute()
+    increment_videos_used(user.id, -1)
 
 
 @router.get("/videos/{video_id}/edits")

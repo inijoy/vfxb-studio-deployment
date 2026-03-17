@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { getStoredAuthToken } from '../lib/authStorage'
 import { useUIStore } from '../store/ui'
 import { useVideoStore } from '../store/video'
-import { supabase } from '../lib/supabase'
 
 interface EditStatusEvent {
   status: 'queued' | 'started' | 'progress' | 'in_progress' | 'done' | 'error' | 'failed'
@@ -27,10 +27,7 @@ export function useEditStatus({ jobId, videoId, onDone, onError }: UseEditStatus
   const connect = useCallback(async () => {
     if (!jobId) return
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const token = session?.access_token
+    const token = getStoredAuthToken()
     if (!token) return
 
     const wsBase = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000')

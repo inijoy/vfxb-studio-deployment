@@ -1,6 +1,6 @@
 -- ============================================================
 -- VFXB Database Schema
--- Run this in Supabase SQL Editor
+-- Legacy SQL schema reference (MongoDB is now the primary datastore)
 -- ============================================================
 
 -- Enable necessary extensions

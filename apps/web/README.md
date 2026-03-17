@@ -81,7 +81,7 @@ VFXB is built as a **full-stack AI video processing platform** using a monorepo 
 
 ## Infrastructure
 
-* Supabase → database + auth
+* MongoDB + JWT auth server → database + auth
 * Cloudflare R2 → video storage
 * Upstash Redis → queue + cache
 * Vercel → frontend hosting
@@ -288,7 +288,7 @@ Main tables:
 
 Security:
 
-* Supabase Row Level Security (RLS)
+* JWT-based API authorization
 
 ---
 
@@ -323,7 +323,7 @@ Worker:
 
 Database:
 
-* Supabase PostgreSQL
+* MongoDB
 
 Queue:
 

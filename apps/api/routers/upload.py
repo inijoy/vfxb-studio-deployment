@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 
-from db.client import get_db
+from db.client import get_db, increment_videos_used
 from middleware.auth import CurrentUser
 from middleware.plan_check import check_video_quota
 from middleware.rate_limit import rate_limit
@@ -157,7 +157,7 @@ async def upload_complete(body: UploadCompleteRequest, user: CurrentUser):
     db.table("videos").update({"status": "processing"}).eq("id", body.video_id).execute()
 
     # Increment usage counter
-    db.table("users").update({"videos_used": db.rpc("increment_videos_used", {"uid": user.id})}).execute()
+    increment_videos_used(user.id, 1)
 
     # Enqueue analysis job
     try:

@@ -1,10 +1,28 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr
+from datetime import datetime, timezone
 
 from db.client import get_db
 from middleware.auth import CurrentUser
 
 router = APIRouter()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_user_doc(doc: dict, fallback_email: str = "") -> dict:
+    out = dict(doc)
+    out.setdefault("email", fallback_email)
+    out.setdefault("full_name", out.get("name"))
+    out.setdefault("avatar_url", out.get("profilePicture"))
+    out.setdefault("plan", "free")
+    out.setdefault("creator_mode", "longform")
+    out.setdefault("videos_used", 0)
+    out.setdefault("videos_limit", 3)
+    out.setdefault("created_at", _now_iso())
+    return out
 
 
 class UserUpdateRequest(BaseModel):
@@ -34,7 +52,7 @@ async def get_me(user: CurrentUser):
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    return result.data
+    return _normalize_user_doc(result.data, user.email)
 
 
 @router.patch("/users/me", response_model=UserResponse)
@@ -64,29 +82,56 @@ async def update_me(user: CurrentUser, body: UserUpdateRequest):
 
     db.table("users").update(updates).eq("id", user.id).execute()
     result = db.table("users").select("*").eq("id", user.id).single().execute()
-    return result.data
+    return _normalize_user_doc(result.data or {}, user.email)
 
 
 @router.post("/users/ensure", status_code=status.HTTP_201_CREATED)
 async def ensure_user(user: CurrentUser):
     """
     Called on first sign-in to upsert the user profile.
-    The frontend calls this immediately after Supabase auth succeeds.
+    The frontend calls this immediately after auth succeeds.
     """
     db = get_db()
 
-    existing = db.table("users").select("id").eq("id", user.id).execute()
+    existing = db.table("users").select("*").eq("id", user.id).single().execute()
     if existing.data:
+        normalized = _normalize_user_doc(existing.data, user.email)
+        patch: dict = {}
+        for key in ("email", "full_name", "avatar_url", "plan", "creator_mode", "videos_used", "videos_limit", "created_at"):
+            if existing.data.get(key) is None:
+                patch[key] = normalized[key]
+        if patch:
+            db.table("users").update(patch).eq("id", user.id).execute()
+        return {"created": False}
+
+    # If auth-server already created the user in Mongo (by email), attach app fields.
+    existing_by_email = db.table("users").select("id, email").eq("email", user.email).single().execute()
+    if existing_by_email.data:
+        db.table("users").update(
+            {
+                "id": user.id,
+                "full_name": existing_by_email.data.get("name"),
+                "avatar_url": existing_by_email.data.get("profilePicture"),
+                "plan": "free",
+                "creator_mode": "longform",
+                "videos_used": 0,
+                "videos_limit": 3,
+                "created_at": existing_by_email.data.get("created_at") or _now_iso(),
+            }
+        ).eq("email", user.email).execute()
         return {"created": False}
 
     db.table("users").insert(
         {
             "id": user.id,
             "email": user.email,
+            "full_name": None,
+            "avatar_url": None,
             "plan": "free",
             "creator_mode": "longform",
             "videos_used": 0,
             "videos_limit": 3,
+            "created_at": _now_iso(),
         }
     ).execute()
 

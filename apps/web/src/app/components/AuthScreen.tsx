@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import vfxbLogo from "../../assets/87baff59339294d92e591456a1fc7b6ab9585915.png";
-import { useAuthStore } from '../../store/auth';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { useAuthStore } from '../../store/auth.ts';
+
+const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL ?? 'http://localhost:5000';
 
 interface AuthScreenProps {
   onAuthenticate: () => void;
@@ -110,14 +111,12 @@ export function AuthScreen({ onAuthenticate }: AuthScreenProps) {
             : 'Create your account to start editing with AI'}
         </p>
 
-        {!isSupabaseConfigured && (
-          <div
-            className="mb-5 rounded-lg border px-3 py-2 text-xs"
-            style={{ backgroundColor: 'rgba(10,132,255,0.08)', borderColor: '#2A2A2A', color: '#BBD9FF' }}
-          >
-            Demo auth mode is active (Supabase not configured). Use any email + password <strong>demo1234</strong>.
-          </div>
-        )}
+        <div
+          className="mb-5 rounded-lg border px-3 py-2 text-xs"
+          style={{ backgroundColor: 'rgba(10,132,255,0.08)', borderColor: '#2A2A2A', color: '#BBD9FF' }}
+        >
+          Auth mode: MongoDB via Mongoose API at <strong>{AUTH_API_URL}</strong>.
+        </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
@@ -230,27 +229,6 @@ export function AuthScreen({ onAuthenticate }: AuthScreenProps) {
             <span className="text-xs" style={{ color: '#555' }}>OR</span>
             <div className="flex-1 h-px" style={{ backgroundColor: '#2A2A2A' }}></div>
           </div>
-
-          {!isSupabaseConfigured && (
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignIn(true);
-                setEmail('dev@vfxb.local');
-                setPassword('demo1234');
-                setName('Demo Developer');
-                toast.info('Demo credentials filled');
-              }}
-              className="w-full py-2.5 sm:py-3 rounded-lg border font-medium text-sm sm:text-base transition-all hover:bg-[#1A1A1A]"
-              style={{
-                backgroundColor: 'rgba(14, 14, 14, 0.5)',
-                borderColor: '#2A2A2A',
-                color: 'white'
-              }}
-            >
-              Use Developer Demo Login
-            </button>
-          )}
 
           {/* Social Login Buttons */}
           <div className="space-y-3">

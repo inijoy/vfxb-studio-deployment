@@ -24,10 +24,10 @@ Working now:
 
 Known gaps:
 
-- root `.env` still contains placeholder Supabase values in some fields
-- database-backed API features will not fully work until valid Supabase credentials are supplied
-- some features depend on external services being correctly configured: Supabase, R2, Stripe, AssemblyAI, Google, Anthropic/OpenAI
-- the Node server in `back/server` is separate from the FastAPI stack and should be treated as an additional service, not part of the Docker compose stack yet
+- root `.env` must contain valid Mongo/JWT and external service credentials
+- database-backed API features require `MONGO_URL` and `JWT_SECRET` to be valid
+- some features depend on external services being correctly configured: MongoDB, R2, Stripe, AssemblyAI, Google, Anthropic/OpenAI
+- ensure auth server, API, and web share consistent JWT/auth configuration
 
 ## Backend Features Added
 
@@ -88,7 +88,7 @@ Added in the backend:
 Added or improved:
 
 - Dockerized `api`, `worker`, `web`, and `redis`
-- API startup no longer hard-fails immediately when Supabase is misconfigured
+- API startup no longer hard-fails immediately when DB is temporarily unavailable
 - in-memory rate-limit fallback when Redis is unavailable
 - safer handling for queue-unavailable states in upload/edit endpoints
 - multiple backend type-check and Pylance fixes across routers and worker steps
@@ -178,9 +178,8 @@ The backend is not finished. These are the main remaining tasks.
 
 ### Required to make the backend fully functional
 
-- replace placeholder `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
-- verify the Supabase schema matches all tables used by the API: `users`, `videos`, `edits`, `chat_messages`, `subscriptions`
-- confirm required RPC functions exist, especially usage-counter helpers
+- set valid `MONGO_URL` and `JWT_SECRET`
+- verify Mongo collections used by the API exist and hold required fields: `users`, `videos`, `edits`, `chat_messages`, `subscriptions`
 - configure valid R2 buckets and public delivery URL
 - verify AssemblyAI/OpenAI/Anthropic/Gemini keys based on the models we actually want to use
 - verify Stripe product IDs and webhook secret
@@ -190,7 +189,7 @@ The backend is not finished. These are the main remaining tasks.
 - add proper integration tests for upload, chat, billing, and edit flows
 - add schema migration documentation and seed data instructions
 - add stronger error classification and structured logging
-- audit auth flow consistency between Supabase auth and the separate Node auth server
+- audit auth flow consistency between web auth store, Node auth server, and FastAPI JWT middleware
 - decide whether `back/server` should remain separate or be merged/replaced
 - add production deployment configuration for API and worker services
 
@@ -200,7 +199,7 @@ The backend is not finished. These are the main remaining tasks.
 - confirm websocket progress updates against real queued edit jobs
 - add retry and dead-letter handling for failed jobs
 - review quota enforcement and subscription transitions against real billing events
-- review fallback behavior when Redis, Supabase, or AI providers are partially unavailable
+- review fallback behavior when Redis, Mongo, or AI providers are partially unavailable
 
 ## What Has Already Been Done
 
@@ -218,7 +217,7 @@ The following setup and fixes are already in place:
 
 3. Backend stability fixes
 
-- FastAPI startup was made more tolerant when Supabase is missing or invalid
+- FastAPI startup was made more tolerant when DB connectivity is missing or invalid
 - rate limiting already has in-memory fallback if Redis is unavailable
 - queue-related endpoints were made less brittle when worker infrastructure is missing
 - multiple type-checking issues in `stripe.py`, `users.py`, `chat.py`, `plan_check.py`, `virality_score.py`, `visual_analysis.py`, and `ffmpeg_executor.py` were fixed
@@ -234,8 +233,8 @@ These are the main items the team should address next.
 
 ### Required for real functionality
 
-- replace placeholder Supabase credentials in root `.env`
-- verify database schema in Supabase matches what the API expects
+- set valid Mongo/JWT credentials in root `.env`
+- verify Mongo collections and required document fields match what the API expects
 - configure valid Cloudflare R2 credentials and public URL
 - configure valid Stripe product and webhook settings
 - verify Google OAuth configuration for both frontend and backend
@@ -247,16 +246,17 @@ These are the main items the team should address next.
 - add a real root test and validation workflow for the monorepo
 - add CI for type-checking, linting, and container smoke tests
 - audit secret handling and rotate any keys that were exposed during local setup
-- document Supabase schema and seed requirements
+- document Mongo collection schema and seed requirements
 - add production deployment docs for web, API, worker, Redis, and auth server
 
 ## Required Environment Variables
 
 At minimum, these must be valid for the main stack to work correctly:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
+- `MONGO_URL`
+- `JWT_SECRET`
 - `VITE_API_URL`
+- `VITE_AUTH_API_URL`
 - `REDIS_URL`
 - `CLOUDFLARE_R2_ACCESS_KEY`
 - `CLOUDFLARE_R2_SECRET_KEY`
@@ -381,7 +381,7 @@ You should see:
 
 ## Suggested Next Owner Tasks
 
-1. Replace placeholder Supabase values and verify `/api/users/me` against the real database.
+1. Validate Mongo/JWT credentials and verify `/api/users/ensure` then `/api/users/me` against the live database.
 2. Test a full upload -> analyze -> chat -> edit flow with real storage credentials.
 3. Decide whether `back/server` stays separate or is folded into the main stack.
 4. Rotate any credentials that were used in local development and should not persist.
