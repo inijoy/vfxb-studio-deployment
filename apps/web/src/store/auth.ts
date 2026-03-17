@@ -22,9 +22,9 @@ interface AuthState {
   setAuth: (auth: { user: AppUser; token: string } | null) => void
   setProfile: (profile: UserProfile | null) => void
   signInWithEmail: (email: string, password: string) => Promise<void>
-  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<void>
-  signInWithGoogle: () => Promise<void>
-  signInWithGitHub: () => Promise<void>
+  signUpWithEmail: (email: string, password: string, fullName?: string, secretWord?: string) => Promise<void>
+  signInWithGoogle: (token: string) => Promise<void>;
+  signInWithGitHub: (code: string) => Promise<void>;
   signOut: () => Promise<void>
   loadProfile: () => Promise<void>
 }
@@ -95,21 +95,24 @@ export const useAuthStore = create<AuthState>()(
         get().setAuth(auth)
       },
 
-      signUpWithEmail: async (email, password, fullName) => {
-        const auth = await requestAuth('/api/signup', {
-          name: fullName,
-          email,
-          password,
-        })
+      signUpWithEmail: async (email, password, fullName, secretWord) => {
+      const auth = await requestAuth('/api/signup', {
+      name: fullName,
+      email,
+      password,
+      secretWord, // <--- Add the secretWord to the payload sent to backend
+    })
+    get().setAuth(auth)
+    },
+
+      signInWithGoogle: async (token) => {
+        const auth = await requestAuth('/api/auth/google', { token })
         get().setAuth(auth)
       },
 
-      signInWithGoogle: async () => {
-        throw new Error('Google sign-in is not wired in Mongo auth flow yet')
-      },
-
-      signInWithGitHub: async () => {
-        throw new Error('GitHub sign-in is not wired in Mongo auth flow yet')
+      signInWithGitHub: async (code) => {
+        const auth = await requestAuth('/api/auth/github', { code })
+        get().setAuth(auth)
       },
 
       signOut: async () => {

@@ -1,24 +1,47 @@
+import { useMemo } from 'react';
 import { Sparkles, TrendingUp, Eye, Clock, Film, Smartphone, BarChart3, Zap } from 'lucide-react';
+import { useAuthStore } from '../../store/auth'; // <-- Import your auth store
 
 interface DashboardProps {
   onNavigate?: (section: string) => void;
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const stats = [
+  // --- 1. GET USER FROM STORE ---
+  const user = useAuthStore((state) => state.user);
+  const profile = useAuthStore((state) => state.profile);
+
+  // --- 2. CALCULATE DYNAMIC GREETING & NAME ---
+  const { greeting, displayName } = useMemo(() => {
+    // Determine Time of Day
+    const hour = new Date().getHours();
+    let timeGreeting = 'Good evening';
+    if (hour >= 5 && hour < 12) timeGreeting = 'Good morning';
+    else if (hour >= 12 && hour < 17) timeGreeting = 'Good afternoon';
+    else if (hour >= 17 && hour < 21) timeGreeting = 'Good evening';
+    else timeGreeting = 'Good night';
+
+    // Determine User's Name (Fallback to 'Creator')
+    const fullName = profile?.full_name || user?.name || 'Creator';
+    const firstName = fullName.split(' ')[0]; // Gets just the first name for a friendlier feel
+
+    return { greeting: timeGreeting, displayName: firstName };
+  }, [user?.name, profile?.full_name]);
+
+  const stats =[
     { label: 'TOTAL VIDEOS', value: '24', trend: '↑ 3 this week', trendColor: '#30D158' },
     { label: 'AVG VIRALITY SCORE', value: '78', trend: '↑ +6 pts from last month', trendColor: '#30D158', valueColor: '#FFD60A' },
     { label: 'TOTAL VIEWS GENERATED', value: '2.4M', trend: '↑ 340K this week', trendColor: '#30D158' },
     { label: 'HOURS SAVED', value: '142h', trend: 'vs manual editing', trendColor: '#444', valueColor: '#0A84FF' }
   ];
 
-  const videos = [
+  const videos =[
     { title: 'YouTube Vlog #24', duration: '03:24', score: 84, date: '2 days ago', status: 'Published', platforms: ['YT', 'TK'] },
     { title: 'Product Review', duration: '05:12', score: 91, date: '3 days ago', status: 'Published', platforms: ['YT'] },
-    { title: 'Tutorial Series EP3', duration: '12:45', score: 78, date: '1 week ago', status: 'Draft', platforms: [] }
+    { title: 'Tutorial Series EP3', duration: '12:45', score: 78, date: '1 week ago', status: 'Draft', platforms:[] }
   ];
 
-  const activities = [
+  const activities =[
     { icon: '🔵', text: 'VFXB fixed hook on "Video Title"', time: '2 mins ago' },
     { icon: '🟢', text: 'Published to YouTube', time: '1 hour ago' },
     { icon: '🟡', text: 'Score improved 71 → 89', time: '3 hours ago' },
@@ -33,7 +56,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold"
           style={{ fontFamily: 'Syne, sans-serif', color: 'white' }}
         >
-          Good morning, Creator 👋
+          {/* --- DYNAMIC TEXT INJECTED HERE --- */}
+          {greeting}, {displayName} 👋
         </h1>
         <button
           onClick={() => onNavigate?.('upload')}
@@ -54,7 +78,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         {stats.map((stat, idx) => (
           <div
             key={idx}
-            className="p-3 sm:p-4 md:p-5 lg:p-6 rounded-lg sm:rounded-xl border"
+            className="p-3 sm:p-4 md:p-5 lg:p-6 rounded-lg sm:rounded-xl border flex flex-col justify-center"
             style={{
               backgroundColor: '#0E0E0E',
               borderColor: '#1A1A1A'
@@ -106,7 +130,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           {videos.map((video, idx) => (
             <div
               key={idx}
-              className="rounded-lg sm:rounded-xl border overflow-hidden hover:border-[#0A84FF] transition-all cursor-pointer"
+              className="rounded-lg sm:rounded-xl border overflow-hidden hover:border-[#0A84FF] transition-all cursor-pointer flex flex-col"
               style={{
                 backgroundColor: '#0E0E0E',
                 borderColor: '#1A1A1A'
@@ -139,7 +163,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               </div>
 
               {/* Content */}
-              <div className="p-3 sm:p-3.5 md:p-4">
+              <div className="p-3 sm:p-3.5 md:p-4 flex flex-col flex-1">
                 <div 
                   className="text-xs sm:text-[13px] md:text-sm font-semibold mb-1"
                   style={{ color: 'white', fontFamily: 'DM Sans, sans-serif' }}
@@ -173,7 +197,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 )}
 
                 {/* Bottom Row */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-auto pt-2">
                   <span 
                     className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px]"
                     style={{
@@ -210,7 +234,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           ].map((action, idx) => (
             <button
               key={idx}
-              className="p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border transition-all hover:border-[#0A84FF] hover:bg-[#0E0E0E]"
+              className="p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border transition-all hover:border-[#0A84FF] hover:bg-[#0E0E0E] flex flex-col items-start"
               style={{
                 backgroundColor: '#0A0A0A',
                 borderColor: '#1A1A1A'
@@ -220,7 +244,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 <action.icon className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10" />
               </div>
               <div 
-                className="text-[10px] sm:text-xs md:text-sm hover:text-white transition-colors"
+                className="text-[10px] sm:text-xs md:text-sm text-left hover:text-white transition-colors"
                 style={{ color: '#888', fontFamily: 'DM Sans, sans-serif' }}
               >
                 {action.label}
