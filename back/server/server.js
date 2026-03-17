@@ -3,8 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const { OAuth2Client } = require('google-auth-library'); // Import Google Lib
 require('dotenv').config();
 
 const app = express();
@@ -12,10 +10,10 @@ const app = express();
 // --- MIDDLEWARE ---
 app.use(express.json());
 app.use(cors({
-  origin: [
-    'http://localhost:5173', // Vite default port
-    'http://localhost:3000',  // Create React App default port
-    process.env.CLIENT_URL   // Production URL
+  origin:[
+    'http://localhost:5173', 
+    'http://localhost:3000',  
+    process.env.CLIENT_URL   
   ].filter(Boolean),
   credentials: true
 }));
@@ -24,11 +22,8 @@ app.use(cors({
 const PORT = process.env.PORT || 5000;
 const MONGO_URL = process.env.MONGO_URL;
 const JWT_SECRET = process.env.JWT_SECRET;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Must match Frontend ID
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-
-// --- GOOGLE CLIENT SETUP ---
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 
 // --- DATABASE CONNECTION ---
 mongoose.connect(MONGO_URL)
@@ -39,27 +34,21 @@ mongoose.connect(MONGO_URL)
 const UserSchema = new mongoose.Schema({
   name: { type: String },
   email: { type: String, required: true, unique: true },
-  password: { type: String }, // Not required (for Google Users)
-  profilePicture: { type: String }
+  password: { type: String }, // Not required for Google/GitHub Users
+  profilePicture: { type: String },
+  secretWord: { type: String } // MUST HAVE THIS FOR NO-EMAIL RESETS
 });
 const User = mongoose.model('User', UserSchema);
 
-// --- NODEMAILER SETUP ---
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
 // ================= ROUTES ================= //
 
-// 1. SIGN UP (Email/Password)
+// 1. SIGN UP (Email, Password, Secret Word)
 app.post('/api/signup', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, secretWord } = req.body;
     
+    if (!secretWord) return res.status(400).json({ message: "Secret Word is required" });
+
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
@@ -69,10 +58,11 @@ app.post('/api/signup', async (req, res) => {
       name, 
       email, 
       password: hashedPassword,
+      secretWord, 
       profilePicture: null 
     });
 
-    const token = jwt.sign({ email: newUser.email, id: newUser._id }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ email: newUser.email, id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(200).json({ result: newUser, token });
   } catch (error) {
@@ -89,15 +79,14 @@ app.post('/api/signin', async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (!existingUser) return res.status(404).json({ message: "User not found" });
 
-    // If user created account via Google, they might not have a password
     if (!existingUser.password) {
-      return res.status(400).json({ message: "Please sign in with Google" });
+      return res.status(400).json({ message: "Please sign in with Google or GitHub" });
     }
 
     const isPasswordCorrect = await bcrypt.compare(password, existingUser.password);
     if (!isPasswordCorrect) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ email: existingUser.email, id: existingUser._id }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ email: existingUser.email, id: existingUser._id }, JWT_SECRET, { expiresIn: '7d' });
     
     res.status(200).json({ result: existingUser, token });
   } catch (error) {
@@ -107,23 +96,21 @@ app.post('/api/signin', async (req, res) => {
 
 // 3. GOOGLE AUTH LOGIN
 app.post('/api/auth/google', async (req, res) => {
-  const { token } = req.body; // Token sent from Frontend
+  const { token } = req.body; // Frontend sends an 'access_token' via useGoogleLogin
 
   try {
-    // A. Verify the token with Google
-    const ticket = await googleClient.verifyIdToken({
-      idToken: token,
-      audience: GOOGLE_CLIENT_ID, 
+    // We use the access token to get the user's profile info directly from Google
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` }
     });
     
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
+    if (!response.ok) throw new Error("Failed to fetch Google user info");
+    
+    const { email, name, picture } = await response.json();
 
-    // B. Check if user exists in DB
     let user = await User.findOne({ email });
 
     if (!user) {
-      // C. If not, create new user (No password)
       user = await User.create({
         name,
         email,
@@ -131,8 +118,7 @@ app.post('/api/auth/google', async (req, res) => {
       });
     }
 
-    // D. Generate JWT for our app
-    const jwtToken = jwt.sign({ email: user.email, id: user._id }, JWT_SECRET, { expiresIn: '1h' });
+    const jwtToken = jwt.sign({ email: user.email, id: user._id }, JWT_SECRET, { expiresIn: '7d' });
     
     res.status(200).json({ result: user, token: jwtToken });
 
@@ -142,52 +128,95 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// 4. FORGOT PASSWORD
-app.post('/api/forgot-password', async (req, res) => {
-  const { email } = req.body;
+// 4. GITHUB AUTH LOGIN
+app.post('/api/auth/github', async (req, res) => {
+  const { code } = req.body; // Frontend sends the ?code=... from the URL
+
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    // 1. Exchange the code for an access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
+        code,
+      }),
+    });
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '15m' });
-    const resetLink = `${CLIENT_URL}/reset-password/${token}`;
+    const tokenData = await tokenResponse.json();
+    if (tokenData.error) throw new Error(tokenData.error_description);
+    
+    const accessToken = tokenData.access_token;
 
-    const mailOptions = {
-      from: `"VFXB Support" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Password Reset - VFXB',
-      html: `
-        <h2>Reset Your Password</h2>
-        <p>Click below to reset your password:</p>
-        <a href="${resetLink}">Reset Password</a>
-      `
-    };
+    // 2. Fetch the user's GitHub profile
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const userData = await userResponse.json();
 
-    await transporter.sendMail(mailOptions);
-    res.status(200).json({ message: "Reset link sent successfully!" });
+    // 3. Fetch user emails (required because some users set their primary email to private)
+    const emailsResponse = await fetch('https://api.github.com/user/emails', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const emailsData = await emailsResponse.json();
+    
+    // Find the primary email from the array
+    const primaryEmailObj = emailsData.find((e) => e.primary) || emailsData[0];
+    const email = primaryEmailObj?.email;
+
+    if (!email) return res.status(400).json({ message: "No email associated with this GitHub account" });
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        name: userData.name || userData.login,
+        email,
+        profilePicture: userData.avatar_url,
+      });
+    }
+
+    const jwtToken = jwt.sign({ email: user.email, id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(200).json({ result: user, token: jwtToken });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to send email" });
+    console.error("GitHub Auth Error:", error);
+    res.status(401).json({ message: "GitHub Authentication Failed" });
   }
 });
 
 // 5. RESET PASSWORD
-app.post('/api/reset-password/:token', async (req, res) => {
-  const { token } = req.params;
-  const { password } = req.body;
+app.post('/api/reset-password', async (req, res) => {
+  const { email, secretWord, newPassword } = req.body;
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const hashedPassword = await bcrypt.hash(password, 12);
-    
-    await User.findByIdAndUpdate(decoded.id, { password: hashedPassword });
-    res.status(200).json({ message: "Password updated successfully!" });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (!user.password) {
+      return res.status(400).json({ message: "Please sign in with Google or GitHub." });
+    }
+
+    if (!user.secretWord || user.secretWord.toLowerCase() !== secretWord.toLowerCase()) {
+      return res.status(400).json({ message: "Incorrect Secret Word!" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await User.findByIdAndUpdate(user._id, { password: hashedPassword });
+
+    res.status(200).json({ message: "Password updated successfully! You can now log in." });
   } catch (error) {
-    res.status(400).json({ message: "Link expired or invalid token" });
+    console.error("Reset Error:", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 });
 
-// Start server only if not running in Vercel (or similar serverless)
+// Start server
 if (require.main === module) {
   app.listen(PORT, () => console.log(`🚀 Server running on port: ${PORT}`));
 }

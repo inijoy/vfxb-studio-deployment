@@ -1,3 +1,4 @@
+import { useAuthStore } from '../../../store/auth';
 import { User, Bell, Shield, Palette, Video, Zap } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -5,14 +6,18 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onNavigate }: SettingsPageProps) {
-  const sections = [
+  // 1. Get the user from the store
+  const user = useAuthStore((s) => s.user);
+
+  const sections =[
     {
       icon: User,
       title: 'Profile',
       description: 'Manage your account information',
-      settings: [
-        { label: 'Display Name', value: 'Creator Name', type: 'input' },
-        { label: 'Email', value: 'creator@example.com', type: 'input' },
+      settings:[
+        // 2. Put the real user data here:
+        { label: 'Display Name', value: user?.name || 'Creator Name', type: 'input' },
+        { label: 'Email', value: user?.email || 'creator@example.com', type: 'input' },
         { label: 'Profile Picture', value: 'Change', type: 'button' }
       ]
     },
@@ -20,8 +25,8 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       icon: Video,
       title: 'Default Video Settings',
       description: 'Set your preferred defaults for new videos',
-      settings: [
-        { label: 'Export Quality', value: '1080p', type: 'select', options: ['720p', '1080p', '4K'] },
+      settings:[
+        { label: 'Export Quality', value: '1080p', type: 'select', options:['720p', '1080p', '4K'] },
         { label: 'Default Platform', value: 'YouTube', type: 'select', options: ['YouTube', 'TikTok', 'Instagram'] },
         { label: 'Auto-save', value: true, type: 'toggle' }
       ]
@@ -30,7 +35,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       icon: Zap,
       title: 'AI Director Preferences',
       description: 'Customize how the AI assists you',
-      settings: [
+      settings:[
         { label: 'Creativity Level', value: 'Balanced', type: 'select', options: ['Conservative', 'Balanced', 'Experimental'] },
         { label: 'Auto-apply suggestions', value: false, type: 'toggle' },
         { label: 'Show AI explanations', value: true, type: 'toggle' }
@@ -40,7 +45,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       icon: Bell,
       title: 'Notifications',
       description: 'Manage your notification preferences',
-      settings: [
+      settings:[
         { label: 'Email notifications', value: true, type: 'toggle' },
         { label: 'Video processing complete', value: true, type: 'toggle' },
         { label: 'Weekly performance report', value: false, type: 'toggle' }
@@ -50,7 +55,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       icon: Shield,
       title: 'Privacy & Security',
       description: 'Control your privacy settings',
-      settings: [
+      settings:[
         { label: 'Two-factor authentication', value: false, type: 'toggle' },
         { label: 'Make profile public', value: false, type: 'toggle' },
         { label: 'Change Password', value: 'Update', type: 'button' }
@@ -60,7 +65,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       icon: Palette,
       title: 'Appearance',
       description: 'Customize your workspace',
-      settings: [
+      settings:[
         { label: 'Theme', value: 'Dark', type: 'select', options: ['Dark', 'Light', 'Auto'] },
         { label: 'Accent Color', value: 'Blue', type: 'select', options: ['Blue', 'Purple', 'Green'] }
       ]
@@ -135,8 +140,9 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
                     {/* Input Type */}
                     {setting.type === 'input' && (
                       <input
+                        key={setting.value as string} // Forces input to re-render when user loads
                         type="text"
-                        defaultValue={setting.value}
+                        defaultValue={setting.value as string}
                         className="px-3 py-2 rounded-lg border text-sm outline-none focus:border-[#0A84FF]"
                         style={{
                           backgroundColor: '#0A0A0A',
@@ -150,7 +156,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
 
                     {setting.type === 'select' && (
                       <select
-                        defaultValue={setting.value}
+                        defaultValue={setting.value as string}
                         className="px-3 py-2 rounded-lg border text-sm outline-none focus:border-[#0A84FF]"
                         style={{
                           backgroundColor: '#0A0A0A',
@@ -203,7 +209,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       </div>
 
       {/* Danger Zone */}
-      <div className="max-w-4xl mt-8">
+      <div className="max-w-4xl mt-8 mb-12">
         <div
           className="rounded-xl border p-6"
           style={{

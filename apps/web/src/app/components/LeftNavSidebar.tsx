@@ -1,4 +1,5 @@
-import { Home, Film, Sparkles, BarChart3, Clock, Users, Plug, Gem, Settings, HelpCircle } from 'lucide-react';
+import { Home, Film, Sparkles, BarChart3, Clock, Users, Plug, Gem, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { useAuthStore } from '../../store/auth';
 
 interface LeftNavSidebarProps {
   activeSection: string;
@@ -6,7 +7,11 @@ interface LeftNavSidebarProps {
 }
 
 export function LeftNavSidebar({ activeSection, onSectionChange }: LeftNavSidebarProps) {
-  const workspaceItems = [
+  // Grab user and logout functionality from auth store
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut || s.logout);
+
+  const workspaceItems =[
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'my-videos', label: 'My Videos', icon: Film },
     { id: 'studio', label: 'Studio', icon: Sparkles },
@@ -16,7 +21,7 @@ export function LeftNavSidebar({ activeSection, onSectionChange }: LeftNavSideba
     { id: 'api', label: 'API & Integrations', icon: Plug }
   ];
 
-  const accountItems = [
+  const accountItems =[
     { id: 'upgrade', label: 'Upgrade Plan', icon: Gem },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'help', label: 'Help & Docs', icon: HelpCircle }
@@ -114,45 +119,47 @@ export function LeftNavSidebar({ activeSection, onSectionChange }: LeftNavSideba
         </div>
       </div>
 
-      {/* User Card */}
-      <div 
-        className="mt-auto p-2.5 rounded-lg border flex items-center gap-2"
+      {/* User Card / Log Out Button */}
+      <button 
+        onClick={async () => {
+          if (signOut) {
+            await signOut(); // Clear the user data
+          }
+          window.location.reload(); // <--- THIS KICKS THEM BACK TO THE LOGIN SCREEN!
+        }}
+        className="mt-auto p-2.5 rounded-lg border flex items-center gap-2 w-full text-left transition-colors group cursor-pointer"
         style={{
           backgroundColor: '#111',
           borderColor: '#1A1A1A'
         }}
+        title="Log out"
       >
         <div 
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 group-hover:bg-red-500 transition-colors"
           style={{ backgroundColor: '#0A84FF' }}
         >
-          C
+          <span className="group-hover:hidden">
+            {user?.name ? user.name.charAt(0).toUpperCase() : ''}
+          </span>
+          <LogOut size={14} className="hidden group-hover:block" />
         </div>
         <div className="flex-1 min-w-0">
           <div 
-            className="text-xs font-semibold truncate"
+            className="text-xs font-semibold truncate group-hover:text-red-400 transition-colors"
             style={{ color: 'white', fontFamily: 'DM Sans, sans-serif' }}
           >
-            Creator Name
+            {/* FIXED: No more "Creator Name" glitch! */}
+            {user?.name || 'Logging out...'}
           </div>
           <div 
-            className="text-[10px]"
+            className="text-[10px] group-hover:text-red-500 transition-colors"
             style={{ color: '#444', fontFamily: 'DM Sans, sans-serif' }}
           >
-            Free Plan
+            <span className="group-hover:hidden">Free Plan</span>
+            <span className="hidden group-hover:block">Log Out</span>
           </div>
         </div>
-        <button
-          className="px-2 py-1 rounded-full text-[10px] font-medium transition-all"
-          style={{
-            backgroundColor: 'rgba(10, 132, 255, 0.15)',
-            color: '#0A84FF',
-            fontFamily: 'DM Sans, sans-serif'
-          }}
-        >
-          ⬆
-        </button>
-      </div>
+      </button>
     </div>
   );
 }
