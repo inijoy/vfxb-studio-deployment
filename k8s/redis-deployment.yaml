@@ -1,0 +1,33 @@
+# Redis Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vfxb-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vfxb-redis
+  template:
+    metadata:
+      labels:
+        app: vfxb-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vfxb-redis
+spec:
+  selector:
+    app: vfxb-redis
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+  type: ClusterIP
