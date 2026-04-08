@@ -80,14 +80,14 @@ class UploadCompleteRequest(BaseModel):
 )
 async def request_presigned_upload(
     body: PresignedUploadRequest,
-    user: CurrentUser,
+    
 ):
     """
     Step 1 of the upload flow.
     Checks quota, creates a video DB record, returns a presigned PUT URL.
     The client uploads directly to Cloudflare R2 using this URL.
     """
-    check_video_quota(user)
+   # check_video_quota(user)
 
     db = get_db()
     video_id = str(uuid.uuid4())
