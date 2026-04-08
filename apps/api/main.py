@@ -2,14 +2,14 @@ import os
 from contextlib import asynccontextmanager
 
 import sentry_sdk
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from db.client import init_db
 from routers import chat, stripe, upload, users, videos
 from routers import websocket as ws
 
+# Initialize Sentry (optional)
 if os.getenv("SENTRY_DSN"):
     sentry_sdk.init(
         dsn=os.getenv("SENTRY_DSN"),
@@ -17,13 +17,13 @@ if os.getenv("SENTRY_DSN"):
         environment=os.getenv("ENV", "development"),
     )
 
-
+# Lifespan event (startup tasks)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
 
-
+# Create FastAPI app
 app = FastAPI(
     title="VFXB API",
     version="1.0.0",
@@ -33,11 +33,13 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "https://vfxb-studio-frontend.onrender.com",
         os.getenv("FRONTEND_URL", "https://vfxb.ai"),
     ],
     allow_credentials=True,
@@ -45,24 +47,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Routers
 app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(videos.router, prefix="/api", tags=["videos"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(ws.router, tags=["websocket"])
 app.include_router(stripe.router, prefix="/api", tags=["stripe"])
-
-
-@app.get("/health", include_in_schema=False)
-async def health():
-    return {"status": "ok", "version": "1.0.0"}
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    if os.getenv("SENTRY_DSN"):
-        sentry_sdk.capture_exception(exc)
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error", "code": "INTERNAL_ERROR"},
-    )
