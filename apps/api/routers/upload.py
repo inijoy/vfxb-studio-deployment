@@ -76,7 +76,7 @@ class UploadCompleteRequest(BaseModel):
 @router.post(
     "/upload/presigned",
     response_model=PresignedUploadResponse,
-    dependencies=[Depends(rate_limit(limit=10, window_seconds=60))],
+    
 )
 async def request_presigned_upload(
     body: PresignedUploadRequest,
