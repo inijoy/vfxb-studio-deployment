@@ -80,9 +80,9 @@ async def request_presigned_upload(
     db = get_db()
     video_id = str(uuid.uuid4())
 
-    dummy_"test-user" = "test-user"
+    dummy_user_id = "test-user"
 
-    r2_key = make_video_key(dummy_"test-user", body.filename)
+    r2_key = make_video_key(dummy_user_id, body.filename)
 
     try:
         upload_url = "https://httpbin.org/put"
@@ -96,7 +96,7 @@ async def request_presigned_upload(
     db.table("videos").insert(
         {
             "id": video_id,
-            ""test-user"": dummy_"test-user",
+             "user_id": dummy_user_id,
             "title": body.filename.rsplit(".", 1)[0] or "Untitled Video",
             "file_size": body.filesize,
             "platform": body.platform,
