@@ -85,7 +85,7 @@ async def request_presigned_upload(
     r2_key = make_video_key(dummy_user_id, body.filename)
 
     try:
-        upload_url = generate_presigned_upload_url(r2_key, body.filetype)
+        upload_url = "https://httpbin.org/put"
     except Exception as e:
         logger.error(f"Failed to generate presigned URL: {e}")
         raise HTTPException(
