@@ -66,6 +66,11 @@ class PresignedUploadResponse(BaseModel):
     r2_key: str
 
 
+# ✅ NEW: Request model for completion
+class CompleteUploadRequest(BaseModel):
+    video_id: str
+
+
 @router.post(
     "/upload/presigned",
     response_model=PresignedUploadResponse,
@@ -96,7 +101,7 @@ async def request_presigned_upload(
     db.table("videos").insert(
         {
             "id": video_id,
-             "user_id": dummy_user_id,
+            "user_id": dummy_user_id,
             "title": body.filename.rsplit(".", 1)[0] or "Untitled Video",
             "file_size": body.filesize,
             "platform": body.platform,
@@ -110,3 +115,34 @@ async def request_presigned_upload(
         video_id=video_id,
         r2_key=r2_key,
     )
+
+
+# ✅ NEW: Upload completion endpoint
+@router.post("/upload/complete")
+async def complete_upload(body: CompleteUploadRequest):
+    """
+    TEMP endpoint to finalize upload.
+    Marks video as completed.
+    """
+
+    db = get_db()
+
+    try:
+        logger.info(f"Completing upload for video_id={body.video_id}")
+
+        # Update video status in DB
+        db.table("videos").update(
+            {"status": "completed"}
+        ).eq("id", body.video_id).execute()
+
+        return {
+            "status": "success",
+            "video_id": body.video_id,
+        }
+
+    except Exception as e:
+        logger.error(f"Upload completion failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Upload completion failed",
+        )
