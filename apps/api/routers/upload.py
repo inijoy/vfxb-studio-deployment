@@ -1,3 +1,4 @@
+from db.storage import VIDEOS_DB
 import logging
 import uuid
 
@@ -66,27 +67,21 @@ class PresignedUploadResponse(BaseModel):
     r2_key: str
 
 
-# ✅ NEW: Request model for completion
 class CompleteUploadRequest(BaseModel):
     video_id: str
+    title: str = "Untitled Video"
+    description: str = ""
 
 
-@router.post(
-    "/upload/presigned",
-    response_model=PresignedUploadResponse,
-)
-async def request_presigned_upload(
-    body: PresignedUploadRequest,
-):
-    """
-    TEMP VERSION (no auth) for testing upload pipeline.
-    """
-
+# =========================
+# PRESIGNED UPLOAD
+# =========================
+@router.post("/upload/presigned", response_model=PresignedUploadResponse)
+async def request_presigned_upload(body: PresignedUploadRequest):
     db = get_db()
     video_id = str(uuid.uuid4())
 
     dummy_user_id = "test-user"
-
     r2_key = make_video_key(dummy_user_id, body.filename)
 
     try:
@@ -98,6 +93,7 @@ async def request_presigned_upload(
             detail={"error": "Storage service unavailable", "code": "STORAGE_ERROR"},
         )
 
+    # Save to DB (Supabase)
     db.table("videos").insert(
         {
             "id": video_id,
@@ -110,6 +106,15 @@ async def request_presigned_upload(
         }
     ).execute()
 
+    # ALSO store in memory (for /videos/{id})
+    VIDEOS_DB[video_id] = {
+        "id": video_id,
+        "title": body.filename.rsplit(".", 1)[0] or "Untitled Video",
+        "description": "",
+        "status": "uploading",
+        "r2_key": r2_key,
+    }
+
     return PresignedUploadResponse(
         upload_url=upload_url,
         video_id=video_id,
@@ -117,23 +122,26 @@ async def request_presigned_upload(
     )
 
 
-# ✅ NEW: Upload completion endpoint
+# =========================
+# COMPLETE UPLOAD
+# =========================
 @router.post("/upload/complete")
 async def complete_upload(body: CompleteUploadRequest):
-    """
-    TEMP endpoint to finalize upload.
-    Marks video as completed.
-    """
-
     db = get_db()
 
     try:
         logger.info(f"Completing upload for video_id={body.video_id}")
 
-        # Update video status in DB
+        # Update Supabase
         db.table("videos").update(
             {"status": "completed"}
         ).eq("id", body.video_id).execute()
+
+        # Update in-memory store (THIS fixes your /videos/{id} crash)
+        if body.video_id in VIDEOS_DB:
+            VIDEOS_DB[body.video_id]["status"] = "completed"
+            VIDEOS_DB[body.video_id]["title"] = body.title
+            VIDEOS_DB[body.video_id]["description"] = body.description
 
         return {
             "status": "success",
