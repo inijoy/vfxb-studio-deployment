@@ -29,11 +29,11 @@ app = FastAPI(
     version="1.0.0",
     description="AI Video Intelligence Platform",
     lifespan=lifespan,
-    docs_url="/docs",   # ✅ ALWAYS ENABLE DOCS (important for testing)
+    docs_url="/docs",   # ✅ ALWAYS ENABLE DOCS
     redoc_url=None,
 )
 
-# ✅ Explicit CORS origins (cleaner + safer)
+# ✅ Explicit CORS origins
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -49,14 +49,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],   # allows OPTIONS, POST, GET, etc.
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Health check (VERY IMPORTANT for Render + debugging)
+# ✅ Root endpoint
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "VFXB API is running"}
+
+# ✅ Health check endpoint (ADDED)
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 # Routers
 app.include_router(users.router, prefix="/api", tags=["users"])
